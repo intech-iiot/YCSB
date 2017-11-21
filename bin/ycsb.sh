@@ -54,11 +54,13 @@ SCRIPT_DIR=$(dirname "$0" 2>/dev/null)
 # Ensure that any extra CLASSPATH variables are set via setenv.sh
 CLASSPATH=
 
+echo "$YCSB_HOME/bin/setenv.sh"
 # Pull in customization options
 if [ -r "$YCSB_HOME/bin/setenv.sh" ]; then
   # Shellcheck wants a source, but this directive only runs if available
   #   So, tell shellcheck to ignore
   # shellcheck source=/dev/null
+  echo "$YCSB_HOME/bin/setenv.sh"
   . "$YCSB_HOME/bin/setenv.sh"
 fi
 
