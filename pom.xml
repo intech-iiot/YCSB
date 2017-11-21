@@ -104,6 +104,7 @@ LICENSE file.
     <arangodb3.version>4.1.7</arangodb3.version>
     <azurestorage.version>4.0.0</azurestorage.version>
     <cloudspanner.version>0.24.0-beta</cloudspanner.version>
+    <flink.version>1.3.2</flink.version>
   </properties>
 
   <modules>
@@ -128,6 +129,7 @@ LICENSE file.
     <module>dynamodb</module>
     <module>elasticsearch</module>
     <module>elasticsearch5</module>
+    <module>flinkqueryablestate</module>
     <module>geode</module>
     <module>googlebigtable</module>
     <module>googledatastore</module>
