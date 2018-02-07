@@ -695,7 +695,8 @@ public class TimeSeriesWorkload extends Workload {
     }
     final Map<String, ByteIterator> tags = new TreeMap<String, ByteIterator>();
     final String key = ((ThreadState)threadstate).nextDataPoint(tags, true);
-    if (db.insert(table, key, tags) == Status.OK) {
+    Status insertStatus = db.insert(table, key, tags);
+    if (insertStatus == Status.OK || insertStatus == Status.BATCHED_OK) {
       return true;
     }
     return false;
