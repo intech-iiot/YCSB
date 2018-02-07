@@ -19,11 +19,15 @@ package com.yahoo.ycsb.db;
 import com.yahoo.ycsb.DB;
 import com.yahoo.ycsb.DBException;
 import com.yahoo.ycsb.ByteIterator;
+import com.yahoo.ycsb.NumericByteIterator;
 import com.yahoo.ycsb.Status;
 import com.yahoo.ycsb.StringByteIterator;
 
+import com.yahoo.ycsb.Utils;
+import com.yahoo.ycsb.workloads.TimeSeriesWorkload;
 import java.sql.*;
 import java.util.*;
+import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import com.yahoo.ycsb.db.flavors.DBFlavor;
@@ -95,6 +99,8 @@ public class JdbcDBClient extends DB {
   /** DB flavor defines DB-specific syntax and behavior for the
    * particular database. Current database flavors are: {default, phoenix} */
   private DBFlavor dbFlavor;
+  private String timestampKey;
+  private String valueKey;
 
   /**
    * Ordered field information for insert and update statements.
@@ -215,6 +221,14 @@ public class JdbcDBClient extends DB {
       cachedStatements = new ConcurrentHashMap<StatementType, PreparedStatement>();
 
       this.dbFlavor = DBFlavor.fromJdbcUrl(urlArr[0]);
+
+      timestampKey = getProperties().getProperty(
+          TimeSeriesWorkload.TIMESTAMP_KEY_PROPERTY,
+          TimeSeriesWorkload.TIMESTAMP_KEY_PROPERTY_DEFAULT);
+
+      valueKey = getProperties().getProperty(
+          TimeSeriesWorkload.VALUE_KEY_PROPERTY,
+          TimeSeriesWorkload.VALUE_KEY_PROPERTY_DEFAULT);
     } catch (ClassNotFoundException e) {
       System.err.println("Error in initializing the JDBS driver: " + e);
       throw new DBException(e);
@@ -400,17 +414,25 @@ public class JdbcDBClient extends DB {
   public Status insert(String tableName, String key, Map<String, ByteIterator> values) {
     try {
       int numFields = values.size();
-      OrderedFieldInfo fieldInfo = getFieldInfo(values);
+      String fieldKeys = getFieldKeys(values);
       StatementType type = new StatementType(StatementType.Type.INSERT, tableName,
-          numFields, fieldInfo.getFieldKeys(), getShardIndexByKey(key));
+          numFields, fieldKeys, getShardIndexByKey(key));
       PreparedStatement insertStatement = cachedStatements.get(type);
       if (insertStatement == null) {
         insertStatement = createAndCacheInsertStatement(type, key);
       }
       insertStatement.setString(1, key);
       int index = 2;
-      for (String value: fieldInfo.getFieldValues()) {
-        insertStatement.setString(index++, value);
+      for(Entry<String, ByteIterator> entry: values.entrySet()) {
+        if (entry.getKey().equals(timestampKey)) {
+          insertStatement.setLong(index++, Utils.bytesToLong(entry.getValue().toArray()));
+        } else if (entry.getKey().equals(valueKey)) {
+          final NumericByteIterator it = (NumericByteIterator) entry.getValue();
+          if (it.isFloatingPoint()) insertStatement.setDouble(index++, it.getDouble());
+          else insertStatement.setLong(index++, it.getLong());
+        } else {
+          insertStatement.setString(index++, entry.getValue().toString());
+        }
       }
       // Using the batch insert API
       if (batchUpdates) {
@@ -492,10 +514,32 @@ public class JdbcDBClient extends DB {
       if (count < values.size() - 1) {
         fieldKeys += ",";
       }
-      fieldValues.add(count, entry.getValue().toString());
+      if (entry.getKey().equals(timestampKey)) {
+        fieldValues.add(count, String.valueOf(Utils.bytesToLong(entry.getValue().toArray())));
+      } else if (entry.getKey().equals(valueKey)) {
+        final NumericByteIterator it = (NumericByteIterator) entry.getValue();
+        boolean isFloat = false;
+        isFloat = it.isFloatingPoint();
+        fieldValues.add(count, isFloat ? String.valueOf(it.getDouble()) : String.valueOf(it.getLong()));
+      } else {
+        fieldValues.add(count, entry.getValue().toString());
+      }
       count++;
     }
 
     return new OrderedFieldInfo(fieldKeys, fieldValues);
+  }
+
+  private String getFieldKeys(Map<String, ByteIterator> values) {
+    String fieldKeys = "";
+    int count = 0;
+    for (Map.Entry<String, ByteIterator> entry : values.entrySet()) {
+      fieldKeys += entry.getKey();
+      if (count < values.size() - 1) {
+        fieldKeys += ",";
+      }
+      count++;
+    }
+    return fieldKeys;
   }
 }
